@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Underwater Scene with Marine Life</title>
+    <style>
+        body {
+            background: linear-gradient(to bottom, #a3e4ff, #004e66);
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 10%, transparent 10%);
+            background-size: 50px 50px;
+            opacity: 0.3;
+            z-index: 0;
+        }
+
+        #ripples, #bubbles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .ripple {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.6);
+            border-radius: 50%;
+            animation: ripple-effect 0.8s linear forwards;
+        }
+
+        @keyframes ripple-effect {
+            to {
+                transform: scale(4);
+                opacity: 0;
+            }
+        }
+
+        .bubble {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 50%;
+            animation: bubble-rise 2s linear forwards;
+        }
+
+        @keyframes bubble-rise {
+            to {
+                transform: translateY(-100px);
+                opacity: 0;
+            }
+        }
+
+        .fish, .jellyfish, .crab {
+            position: absolute;
+            z-index: 2;
+            transform-origin: center;
+        }
+
+        .fish {
+            animation: shimmer 2s infinite alternate;
+        }
+
+        @keyframes shimmer {
+            0% { filter: brightness(1); }
+            100% { filter: brightness(1.2); }
+        }
+
+        .jellyfish {
+            animation: sway 3s infinite alternate;
+        }
+
+        @keyframes sway {
+            0%, 100% { transform: translateX(-5px); }
+            50% { transform: translateX(5px); }
+        }
+
+        @keyframes swayPlant {
+            0%, 100% { transform: rotate(-3deg); }
+            50% { transform: rotate(3deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="ripples"></div>
+    <div id="bubbles"></div>
+    <script>
+        const ripplesContainer = document.getElementById('ripples');
+        const bubblesContainer = document.getElementById('bubbles');
+        let targetX = window.innerWidth / 2;
+        let targetY = window.innerHeight / 2;
+        let time = 0;
+
+        // Fish SVG
+        const fishSVG = `
+            <svg class="fish" width="80" height="40" viewBox="0 0 160 80">
+                <defs>
+                    <linearGradient id="fishGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#ff8c82;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#ff4d40;stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+                <path d="M30 40 Q80 20 130 40 Q80 60 30 40 Z" fill="url(#fishGrad)" stroke="#d9453a" stroke-width="2"/>
+                <path d="M20 30 Q0 40 20 50 Q30 40 20 30" fill="#ffb347" stroke="#d9453a" stroke-width="1.5"/>
+                <circle cx="120" cy="35" r="4" fill="white"/>
+                <circle cx="120" cy="35" r="1.5" fill="black"/>
+                <path d="M80 30 Q90 15 100 30" fill="none" stroke="#ffb347" stroke-width="2"/>
+                <path d="M80 50 Q90 65 100 50" fill="none" stroke="#ffb347" stroke-width="2"/>
+                <path d="M50 35 Q60 25 70 35" fill="none" stroke="#ffb347" stroke-width="1.5"/>
+            </svg>
+        `;
+
+        // Flatter Jellyfish SVG (Umbrella-like)
+        const jellyfishSVG = `
+            <svg class="jellyfish" width="40" height="60" viewBox="0 0 80 120">
+                <defs>
+                    <linearGradient id="jellyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" style="stop-color:#ffb6c1;stop-opacity:0.8" />
+                        <stop offset="100%" style="stop-color:#ff69b4;stop-opacity:0.6" />
+                    </linearGradient>
+                </defs>
+                <!-- Simplified dome with a closed, filled top -->
+                <path d="M20 40 Q40 0 60 40 C70 60 50 80 40 80 C30 80 10 60 20 40 Z" fill="url(#jellyGrad)" stroke="#ff69b4" stroke-width="1"/>
+                <path d="M40 80 Q45 100 40 120" fill="none" stroke="#ff69b4" stroke-width="2"/>
+                <path d="M30 80 Q35 100 30 120" fill="none" stroke="#ff69b4" stroke-width="2"/>
+                <path d="M50 80 Q55 100 50 120" fill="none" stroke="#ff69b4" stroke-width="2"/>
+            </svg>
+        `;
+
+        // Crab SVG
+        const crabSVG = `
+            <svg class="crab" width="40" height="20" viewBox="0 0 80 40">
+                <path d="M20 20 Q40 10 60 20 Q40 30 20 20" fill="#cd5c5c" stroke="#8b0000" stroke-width="1"/>
+                <path d="M10 15 L5 5" fill="none" stroke="#8b0000" stroke-width="2"/>
+                <path d="M70 15 L75 5" fill="none" stroke="#8b0000" stroke-width="2"/>
+                <circle cx="30" cy="15" r="2" fill="black"/>
+                <circle cx="50" cy="15" r="2" fill="black"/>
+            </svg>
+        `;
+
+        // Single Fish
+        const fishSchool = [];
+        const fishDiv = document.createElement('div');
+        fishDiv.innerHTML = fishSVG;
+        const fish = fishDiv.firstElementChild;
+        document.body.appendChild(fish);
+        fishSchool.push({
+            element: fish,
+            x: window.innerWidth / 2,
+            y: window.innerHeight / 2,
+            prevRippleX: window.innerWidth / 2,
+            prevRippleY: window.innerHeight / 2,
+            speed: 0.08,
+            scale: 1
+        });
+        fish.style.left = `${fishSchool[0].x - 40}px`;
+        fish.style.top = `${fishSchool[0].y - 20}px`;
+
+        // Jellyfish
+        const jellyfishCount = 5;
+        const jellyfishList = [];
+        for (let i = 0; i < jellyfishCount; i++) {
+            const jellyDiv = document.createElement('div');
+            jellyDiv.innerHTML = jellyfishSVG;
+            const jelly = jellyDiv.firstElementChild;
+            document.body.appendChild(jelly);
+            const scale = 0.7 + Math.random() * 0.6;
+            jelly.style.width = `${60 * scale}px`;
+            jelly.style.height = `${60 * scale}px`;
+            jellyfishList.push({
+                element: jelly,
+                x: Math.random() * window.innerWidth,
+                y: window.innerHeight - Math.random() * window.innerHeight,
+                speed: 0.5 + Math.random() * 0.5,
+                scale: scale
+            });
+            const j = jellyfishList[i];
+            j.element.style.left = `${j.x - (30 * scale)}px`;
+            j.element.style.top = `${j.y - (30 * scale)}px`;
+        }
+
+        // Crabs
+        const crabCount = 5;
+        const crabList = [];
+        for (let i = 0; i < crabCount; i++) {
+            const crabDiv = document.createElement('div');
+            crabDiv.innerHTML = crabSVG;
+            const crab = crabDiv.firstElementChild;
+            document.body.appendChild(crab);
+            const scale = 0.8 + Math.random() * 0.4;
+            crab.style.width = `${40 * scale}px`;
+            crab.style.height = `${20 * scale}px`;
+            crabList.push({
+                element: crab,
+                x: Math.random() * window.innerWidth,
+                y: window.innerHeight - 20 * scale,
+                speed: 1 + Math.random() * 1,
+                direction: Math.random() > 0.5 ? 1 : -1,
+                disturbTimer: 0,
+                scale: scale
+            });
+            const c = crabList[i];
+            c.element.style.left = `${c.x - (20 * scale)}px`;
+            c.element.style.top = `${c.y - (10 * scale)}px`;
+        }
+
+        // Mouse movement
+        document.addEventListener('mousemove', (e) => {
+            targetX = e.clientX;
+            targetY = e.clientY;
+        });
+
+        // Create ripple
+        function createRipple(x, y) {
+            const ripple = document.createElement('div');
+            ripple.className = 'ripple';
+            ripple.style.left = `${x - 10}px`;
+            ripple.style.top = `${y - 10}px`;
+            ripplesContainer.appendChild(ripple);
+            setTimeout(() => ripple.remove(), 800);
+        }
+
+        // Create bubble
+        function createBubble(x, y) {
+            const bubble = document.createElement('div');
+            bubble.className = 'bubble';
+            bubble.style.left = `${x - 5}px`; // Center bubble (10px wide)
+            bubble.style.top = `${y - 5}px`;
+            bubblesContainer.appendChild(bubble);
+            setTimeout(() => bubble.remove(), 2000); // Match animation duration
+        }
+
+        // Animation loop
+        function animate() {
+            time += 0.02;
+
+            // Fish animation
+            const fish = fishSchool[0];
+            const fishTargetX = targetX;
+            const fishTargetY = targetY;
+            let dx = fishTargetX - fish.x + Math.sin(time) * 2;
+            let dy = fishTargetY - fish.y + Math.cos(time) * 1;
+
+            fish.x += dx * fish.speed;
+            fish.y += dy * fish.speed;
+            const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            fish.element.style.left = `${fish.x - 40}px`;
+            fish.element.style.top = `${fish.y - 20}px`;
+            fish.element.style.transform = `rotate(${angle}deg)`;
+
+            // Ripples and bubbles for fish
+            const rippleDx = fish.x - fish.prevRippleX;
+            const rippleDy = fish.y - fish.prevRippleY;
+            const distance = Math.sqrt(rippleDx * rippleDx + rippleDy * rippleDy);
+            if (distance > 20) {
+                createRipple(fish.x, fish.y);
+                createBubble(fish.x - 20, fish.y); // Bubble spawns behind fish
+                fish.prevRippleX = fish.x;
+                fish.prevRippleY = fish.y;
+            }
+
+            // Jellyfish animation with repulsion from fish
+            jellyfishList.forEach(jelly => {
+                let jellyDx = 0;
+                let jellyDy = -(jelly.speed * (0.5 + Math.cos(time + jelly.x / 100))); // Base upward movement
+
+                const distX = jelly.x - fish.x;
+                const distY = jelly.y - fish.y;
+                const distance = Math.sqrt(distX * distX + distY * distY);
+                const minDist = 100 * (fish.scale + jelly.scale) / 2;
+                if (distance < minDist) {
+                    const repelForce = (minDist - distance) * 0.05;
+                    jellyDx += (distX / distance) * repelForce;
+                    jellyDy += (distY / distance) * repelForce;
+                }
+
+                jelly.x += jellyDx;
+                jelly.y += jellyDy;
+
+                if (jelly.y < -60 * jelly.scale) {
+                    jelly.y = window.innerHeight + 60 * jelly.scale;
+                    jelly.x = Math.random() * window.innerWidth;
+                }
+                jelly.element.style.left = `${jelly.x - (30 * jelly.scale)}px`;
+                jelly.element.style.top = `${jelly.y - (30 * jelly.scale)}px`;
+            });
+
+            // Crab animation
+            crabList.forEach(crab => {
+                let speed = crab.speed;
+                if (crab.disturbTimer > 0) {
+                    speed *= 3;
+                    crab.disturbTimer -= 0.02;
+                }
+
+                const distToFish = Math.sqrt((fish.x - crab.x) ** 2 + (fish.y - crab.y) ** 2);
+                if (distToFish < 100 && crab.disturbTimer <= 0) {
+                    crab.disturbTimer = 1;
+                }
+
+                crab.x += speed * crab.direction;
+                if (crab.x < 20 * crab.scale || crab.x > window.innerWidth - 20 * crab.scale) {
+                    crab.direction *= -1;
+                }
+                crab.element.style.left = `${crab.x - (20 * crab.scale)}px`;
+                crab.element.style.top = `${crab.y - (10 * crab.scale)}px`;
+                crab.element.style.transform = `scaleX(${crab.direction})`;
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        // Underwater plants
+        const plantCount = 100;
+        const seaweedPaths = [
+            "M10 100 Q15 80 10 60 Q5 40 10 20 Q15 0 10 0",
+            "M10 100 Q5 75 10 50 Q15 25 10 0",
+            "M10 100 Q15 90 10 80 Q5 70 10 60 Q15 50 10 40 Q5 30 10 20 Q15 10 10 0"
+        ];
+
+        function createPlant(positionPercent) {
+            const scale = 0.5 + Math.random() * 1;
+            const path = seaweedPaths[Math.floor(Math.random() * seaweedPaths.length)];
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svg.setAttribute("width", `${20 * scale}`);
+            svg.setAttribute("height", `${100 * scale}`);
+            svg.setAttribute("viewBox", "0 0 20 100");
+            svg.style.position = "absolute";
+            svg.style.bottom = "0";
+            svg.style.left = `${positionPercent}%`;
+            svg.style.zIndex = "0";
+            svg.style.transformOrigin = "50% 100%";
+            svg.style.animation = `swayPlant ${2 + Math.random() * 2}s ease-in-out infinite`;
+            svg.style.animationDelay = `-${Math.random() * 3}s`;
+
+            const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+            const gradient = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
+            gradient.setAttribute("id", "seaweedGrad");
+            gradient.setAttribute("x1", "0%");
+            gradient.setAttribute("y1", "0%");
+            gradient.setAttribute("x2", "0%");
+            gradient.setAttribute("y2", "100%");
+            const stop1 = document.createElementNS("http://www.w3.org/2000/svg", "stop");
+            stop1.setAttribute("offset", "0%");
+            stop1.setAttribute("style", "stop-color:#9acd32;stop-opacity:1");
+            const stop2 = document.createElementNS("http://www.w3.org/2000/svg", "stop");
+            stop2.setAttribute("offset", "100%");
+            stop2.setAttribute("style", "stop-color:#228b22;stop-opacity:1");
+            gradient.appendChild(stop1);
+            gradient.appendChild(stop2);
+            defs.appendChild(gradient);
+            svg.appendChild(defs);
+
+            const pathElem = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            pathElem.setAttribute("d", path);
+            pathElem.setAttribute("stroke", "url(#seaweedGrad)");
+            pathElem.setAttribute("stroke-width", "2");
+            pathElem.setAttribute("fill", "none");
+            svg.appendChild(pathElem);
+
+            document.body.appendChild(svg);
+        }
+
+        for (let i = 0; i < plantCount; i++) {
+            const positionPercent = Math.random() * 100;
+            createPlant(positionPercent);
+        }
+
+        animate();
+    </script>
+</body>
+</html>
